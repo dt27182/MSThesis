@@ -1,0 +1,55 @@
+\relax 
+\citation{McFarlan:1990}
+\citation{hoe:syn}
+\citation{hoe:mult}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Background}{1}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Overall Tool Flow\relax }}{2}}
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:workflow}{{1}{2}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Proposed Solution}{2}}
+\citation{Bachrach:2012}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Technical Approach}{3}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Input FSM Specification}{3}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces {\bf  Single Thread View of Variable Latency Unit Interface} Black wire are user facing IO, red wires are tool facing IO\relax }}{3}}
+\newlabel{fig:VarLatIO}{{2}{3}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.1}IO Semantics}{3}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.2}Variable Latency Unit Interface}{3}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces {\bf  Input Minimal FSM} The input FSM consists of one register, one input port, and one output port. The register is split up into read and write ports. The combinational logic is not shown.\relax }}{4}}
+\newlabel{fig:initialFSM}{{3}{4}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Minimal FSM Transformation}{4}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}State and IO replication}{4}}
+\newlabel{sec:replication}{{4.3}{4}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces {\bf  Final Multi-threaded, Pipelined FSM} This is a 2 thread, 3 stage version of the input FSM with all of the generated control logic shown. The cominational logic is not shown.\relax }}{4}}
+\newlabel{fig:finalFSM}{{4}{4}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Pipeline Register Insertion}{4}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Control Logic Generation}{5}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.5.1}IOBusy Signals}{5}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.5.2}RAW Hazard Signals}{5}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.5.3}Kill Signals}{5}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.5.4}ThreadID signals}{5}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.5.5}Valid Signals}{5}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.5.6}Stall Signals}{5}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Results}{5}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Dynamic Interleave}{5}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Fixed Interleave}{5}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion and Future Work}{6}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces {\bf  Dynamic Interleave Task{\tt  /}Cycle} The Y-Axis is in units of $task/cycle$.\relax }}{6}}
+\newlabel{fig:dynamicTaskPerCycle}{{5}{6}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces {\bf  Dynamic Interleave (Cycle{\tt  /}Time){\tt  /}Area} The Y-Axis is in units of $GHz/um^2$.\relax }}{6}}
+\newlabel{fig:dynamicFreqPerArea}{{6}{6}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces {\bf  Dynamic Interleave Throughput{\tt  /}Area} The Y-Axis is in units of $(task/ns)/um^2$.\relax }}{6}}
+\newlabel{fig:dynamicThroughputPerArea}{{7}{6}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces {\bf  Fixed Interleave Task{\tt  /}Cycle} The data points where number of stages {\tt  >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $task/cycle$.\relax }}{7}}
+\newlabel{fig:fixedTaskPerCycle}{{8}{7}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces {\bf  Fixed Interleave (Cycle{\tt  /}Time){\tt  /}Area} The data points where number of stages {\tt  >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $GHz/um^2$.\relax }}{7}}
+\newlabel{fig:fixedFreqPerArea}{{9}{7}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces {\bf  Fixed Interleave Throughput{\tt  /}Area} The data points where number of stages {\tt  >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $(task/ns)/um^2$.\relax }}{7}}
+\newlabel{fig:fixedThroughputPerArea}{{10}{7}}
+\bibstyle{abbrvnat}
+\bibdata{references}
+\bibcite{Bachrach:2012}{{1}{}{{Bachrach et~al.}}{{Bachrach, Vo, Richards, Lee, Waterman, Avi\v {z}ienis, Wawrzynek, and Asanovi\'{c}}}}
+\bibcite{McFarlan:1990}{{2}{1990}{{McFarland et~al.}}{{McFarland, Parker, and Camposano}}}
+\bibcite{hoe:mult}{{3}{}{{Nurvitadhi et~al.}}{{Nurvitadhi, Hoe, Kam, and Lu}}}
+\bibcite{hoe:syn}{{4}{}{{Nurvitadhi et~al.}}{{Nurvitadhi, Hoe, Kam, and Lu}}}
+\newlabel{sigplanconf@finalpage}{{6}{8}}

@@ -1,0 +1,50 @@
+This is BibTeX, Version 0.99c (TeX Live 2009/Debian)
+The top-level auxiliary file: paper.aux
+The style file: abbrvnat.bst
+Database file #1: references.bib
+Warning--empty year in Bachrach:2012
+Warning--empty year in Bachrach:2012
+Warning--empty year in hoe:mult
+Warning--empty year in hoe:syn
+You've used 4 entries,
+            2773 wiz_defined-function locations,
+            613 strings with 5306 characters,
+and the built_in function-call counts, 2181 in all, are:
+= -- 159
+> -- 183
+< -- 0
++ -- 62
+- -- 57
+* -- 196
+:= -- 343
+add.period$ -- 12
+call.type$ -- 4
+change.case$ -- 31
+chr.to.int$ -- 3
+cite$ -- 12
+duplicate$ -- 96
+empty$ -- 165
+format.name$ -- 61
+if$ -- 442
+int.to.chr$ -- 2
+int.to.str$ -- 1
+missing$ -- 4
+newline$ -- 28
+num.names$ -- 16
+pop$ -- 85
+preamble$ -- 1
+purify$ -- 27
+quote$ -- 0
+skip$ -- 56
+stack$ -- 0
+substring$ -- 8
+swap$ -- 10
+text.length$ -- 0
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 44
+warning$ -- 4
+while$ -- 12
+width$ -- 0
+write$ -- 57
+(There were 4 warnings)
