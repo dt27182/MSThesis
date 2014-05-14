@@ -1,0 +1,27 @@
+\section{AutoMArch}
+AutoMArch is capable of creating multi-threaded in-order designs of any number of threads and any number of pipeline stages that is functionally equivalent to n-copies of the original base datapath, where n is the number of threads.
+
+\subsection{Input Datapath Restrictions}
+The input base functional datapath can be an arbitrary FSM with the following restrictions:
+
+{\bf (1)} The input FSM must communicate to the outside world through ready/valid ports  
+
+{\bf (2)} The designer cannot use input valid or output ready signals as inputs to any part of their circuit
+
+{\bf (3)} Any functional units that may take more than one clock cycle to return responses(caches, multipliers, dividers, etc) must be accessed through the Variable Latency Unit Interface discussed below.
+
+\subsubsection{IO Semantics}
+When input ready or output valid is driven high by the input FSM, this implicity signals to the tool that the input FSM requires the use of the input or output port on the current state update. Thus, the tool generates logic that examines the input ready or output valid and stalls the pipeline if the corresponding input valid or output ready is not driven high by external modules. The designer should design the input FSM so that input readies and output valids are only driven high when absolutely necessary to avoid unnecessary stalling the automatically multi-threaded and pipelined version of the circuit.
+
+\begin{figure}
+	\centering
+    \resizebox{\columnwidth}{!}{\includegraphics{figures/TransactionalInterface}}
+    \caption{{\bf Single Thread View of Variable Latency Unit Interface} Black wire are user facing IO, red wires are tool facing IO}
+	\label{fig:VarLatIO}
+\end{figure}
+
+\subsubsection{Variable Latency Unit Interface}
+In order to accomodate caches and long latency arithmetic units in the minimal FSM specification that is not allowed to have any optimization or control logic implemented, the tool provides the Variable Latency Unit Interface. The designer should access any caches or long latency arithmetic units through a Variable Latency Unit Interface and treat that Variable Latency Unit Interface like a piece of combinational logic in the input FSM specification. IE the designer should not use the Resp Pending port of the Variable Latency Unit Interface to drive any part of their circuit and should pretend that the Variable Latency Unit Interface always gives a valid response immediately. The tool will automatically generate control logic that deals with the Variable Latency Unit Interface not immediately outputting a valid response.
+
+\subsection{Automatic Pipelining}
+\subsection{Automatic Multi-threading}

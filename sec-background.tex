@@ -1,5 +1,5 @@
 \section{Background}
-\subsection{RTL and its Limitations}
+\subsection{RTL And Its Limitations}
 \label{section:RTLCons}
 In a RTL specification, digital logic designers specify a synchronous digital circuit in terms of data flow between synchronous state elements such as flip-flops and SRAM memory blocks. There are generally two types of variables in RTL languages: registers and wires. Registers correspond to synchronous state elements and wires correspond to the output of intermediate combinational logic blocks. The designer specifies the state elements needed by declaring registers and specifies the combinational logic that connects the state elements by using conditional assignment operators along with arithmetic operators on registers and wires declared within the design. This RTL specification is then synthesized into a gate level specification through a synthesis tool and then fed into the physical design portion of the IC design flow. 
 
@@ -12,7 +12,7 @@ The first limitation of RTL mentioned in the above section can be addressed thro
 
 While Chisel does not address the second limitation of RTL specification, it will be used to specify the base functional datapath for the digital hardware frontend system proposed in this thesis.
 
-\subsection{HLS and its Limitations}
+\subsection{HLS And Its Limitations}
 High Level Synthesis (HLS) has been an attempt to address both limitations of RTL specification mentioned in \ref{section:RTLCons} by going to a higher level of specification than RTL. In this paradigm, the designer specifies the logic design as a data flow graph through sequential variable updates in a C like language, which frees the designer from having to specify the cycle by cycle operation of a specific datapath. Then a HLS tool maps the dataflow graph to a datapath based on performance, power, and area constraints and synthesizes a gate-level description of the design from the high level specification, which is then fed into the physical design portion of the IC design flow. 
 
 Unfortunately, designs synthesized from HLS specifications generally fail to have acceptable performance, power, and area characteristics compared to equivalent designs synthesized from RTL specifications. Much effort has been put into making the synthesis process produce more optimal designs, but rapid breakthroughs are unlikely given that several subproblems in the process have been proven to be NP-Hard\cite{McFarlan:1990}.
