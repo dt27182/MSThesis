@@ -49,7 +49,7 @@ If this default placement is not suitable, the designer is given the option to m
 Thus, the designer has the flexibility to manually place none, some, or all of the circuit components in the base functional datapath. The designer can initially let to the tool place all of the circuit components and gradually manually place components as performance issues are discovered.
 
 {\bf Pipeline Hazard Resolution}
-In the traditional framework of inorder processor pipeline design, there are three types of hazards - data hazards, control hazards, and structural hazards. Only data hazards need to be dealt with by the tool. Data hazards arise when the next state update in pipeline stage X reads a state element R that could be written by a next state update in pipeline stage Y, where Y {\tt >} X, but Y {\tt <=} the stage of the R's write port. In traditional pipelined processors, control hazards arise when the next PC information is not available soon enough for branch and jump instructions. This is really just a data hazard on the PC register and does not need to be considered separately. Likewise, in traditional pipelined processors structural hazards arise when instructions in different stages of the pipeline need to write to the register file at the same time, but there is only one register file write port. This cannot happen in AFDO because the input base functional datapath does not have multiple pipeline stages and the tool will not generate logic to have instructions at different pipeline stages write to the same architectural state element write port.
+In the traditional framework of inorder processor pipeline design, there are three types of hazards - data hazards, control hazards, and structural hazards. Only data hazards need to be dealt with by the tool. Data hazards arise when the next state update in pipeline stage X reads a state element R that could be written by a next state update in pipeline stage Y, where Y {\tt >} X, but Y {\tt <=} the stage of the R's write port. This situation would make the next state update in pipeline stage X use stale read data and result in a non functionally correct design. In traditional pipelined processors, control hazards arise when the next PC information is not available soon enough for branch and jump instructions. This is really just a data hazard on the PC register and does not need to be considered separately. Likewise, in traditional pipelined processors structural hazards arise when instructions in different stages of the pipeline need to write to the register file at the same time, but there is only one register file write port. This cannot happen in AFDO because the input base functional datapath does not have multiple pipeline stages and the tool will not generate logic to have instructions at different pipeline stages write to the same architectural state element write port.
 
 There are three common ways to resolve data hazards - interlocking, bypassing, and speculation. Each option has different performance and area characteristics. The tool generates logic that implements interlocking by default. The designer may choose bypassing or speculation on a read port by read port basis by annotating the particular architectural state element read port they want to be bypassed or speculated in the base functional datapath RTL source. Details of each hazard resolution option will be discussed in \ref{section:logicGen}
 
@@ -96,10 +96,83 @@ We must maintain the following conditions during the pipeline stage propagation 
 
 {\bf Obtaining an Optimal Placement}
 
+After a legal pipeline register placement is obtained, the tool automatically optimizes the pipeline register placement with regards to critical path delay by balancing out the critical path length in each pipeline stage. 
+
+It does this by first assigning a delay value for each node in the node graph. In the current implementation, a naive assignment is used. All combinational logic nodes are assigned a delay of 1.0 and all wires are assigned a delay of 0.0. Memory read ports as well as Variable Latency Units are also assigned a delay of 1.0. A more sophisticated assignment based on the delay data collected from ASIC tools could be used, but this naive assignment is mostly sufficient because VLSI retiming can be applied on top of the pipeline register placement performed by the tool. Thus, the pipeline register placement optimization only has to be approximately correct to produce good critical path delay once the design is pushed out through the ASIC design flow. Additionally, real ASIC delay characteristics cannot be fully captured by a static assignment of delay values to each node because they are highly dependent on gate level optimizations performed by the ASIC tools, which varies per design, as well as wire delays, which are dependent the layout of the circuit. So putting too much effort into assigning highly accurate delay values to nodes is futile anyways. 
+
+Then, the tool uses the following pressure based algorithm to move the pipeline stage boundaries:
+
+{\bf (1)} The tool finds the critical path in each pipeline stage and calculates their delays.
+
+{\bf (2)} On each pipeline stage boundary, the side with the longer critical path delay "pushes" the boundary towards the other side. This "push" is accomplished by taking the end node from the critical path on the side with the longer critical path delay and moving it across the pipeline boundary.
+
+{\bf (3)} Repeat until the maximum critical path of all the stages stops decreasing.
+
+\subsubsection{Data Hazard Resolution Option Details}
+\label{section:logicGen}
+Data hazard resolution options are selected on a read port per read port basis. Every read port of every architectural state element can have a different data hazard resolution option. By default, data hazards on every read port is resolved by interlocking and the designer can annotate the read ports whose data hazards they want to be resolved by bypassing or speculation.
+
+{\bf Interlocking}
+
+Interlocking is the simplest way to resolve data hazards. When the next state update at stage X has the possiblity of using stale read data due to a next state update at stage y {\tt >} x writing to an architectural state element being read by the next state update at stage X, we simply stall the pipeline at stage X and inject bubbles into stage X + 1 until the next state update at stage y flows down the pipeline and finishes writing to the architectural state element. Interlocking has the lowest cost in terms of area and cycle time, but has the highest cost in terms of performance because it inserts bubbles into the pipeline whenever a data hazard occurs.
+
+{\bf Bypassing}
+
+Bypassing allows data hazards to be resolved with fewer bubbles inserted into the pipeline if the write data and write enable signal of the contested architectural state element is earlier than the stage of the write port by inserting muxing the read data pin of the read port with the write data signal as soon as it is available. If the write data and write enable signals are available in the stage immediately after the read port, no bubbles need to be inserted at all. If the write data and write enable signals are only available at the stage of the write port, then bypassing does not produce fewer bubbles than interlocking. Compared to interlocking, bypassing has higher cost in terms of area and cycle time due to the bypass network, but has lower cost in performance because inserts fewer bubbles into the pipeline.
+
+In order to select bypassing as the data hazard resolution option, the designer simply annotates the desired read port as bypassed in the RTL source file of the base functional datapath.
+
+{\bf Speculation}
+
+For certain architectural state elements such as the PC register in RISC processors, interlocking is not acceptable because of the performance penalty and bypassing does not help because the write data signal of the PC register's write port is not immediately available. In these cases, it is desirable to speculate on the next read value of the architectural state element and then kill next state updates present in the pipeline between the stage of the read port and the stage of state element write port, including the next state update present in the stage of the read port, if the speculated value is determined to be incorrect later.
+
+Control logic generation for arbitrary speculation is very complex, so the tool places the following restrictions on what kind of speculation maybe performed:
+
+{\bf (1)} Only the read ports of registers maybe speculated upon.
+
+{\bf (2)} There may only be one speculated register read port per pipeline stage.
+
+{\bf (3)} Assuming the stage of a speculated read port is stage X and the stage of the corresponding write port is stage Y, there may not be IO ports, Variable Latency Units, architectural state element write ports, and other speculated read ports present in the stages between stage X and stage Y, inclusive of stage X.
+
+The user specifies that a register read port should be speculated upon in by annotating the desired read port as speculated in the RTL source file of the base functional datapath. The user creats a speculative clone of the register associated with the read port speculated upon and creates the update logic for that speculative clone register in the RTL source of the base funtional datapath. Then the user uses some annotations to label this clone register as the speculative clone of the original register. The tool will generate control logic that muxes the read data port of the original register with the read data port of the speculative clone register. The read data from the speculative clone register will be choosen except on the clock cycle immediate after a mispredict. During that cycle, the data held in the speculative clone register is synced with the correct data in the original register.
 
 \subsubsection{Pipeline Control Logic Generation}
-\label{section:logicGen}
+After the tool places the pipeline registers, it then automatically generates the pipeline control logic that keeps the functional behavior of the pipelined data path the same as the functional behavior of the base input circuit. The pipeline control logic will need to deal with both the availability of valid tokens at the ready/valid IO ports as well as the data hazards introduced by pipelining. I will first present the scheme necessary to generate control logic that deals with the availability of IO ports and handles all data hazards through interlocking. Then I will present the control logic needed for bypassing and speculation as modifications on top of the basic interlocking scheme.
+
+The following signals are generated in the basic interlocking scheme:
+
+{\bf IOBusy Signals}
+
+An IO port is considered busy if the input ready/output valid signal is driven high, which implicitly signals that the data from this port is needed to be consumed/produced, and the input valid/output ready signal is driven low by an outside module, which indicates that the port is not available.
+
+
+{\bf VarLatIOBusy Signals}
+
+A Variable Latency Unit is busy if its RespPending port is driven high.
+
+
+{\bf RAW Hazard Signals}
+
+A read port belonging to stage X is considered to have a RAW hazard if a pipeline stage Y is valid, has the same thread ID as stage X, and contains a transaction that could write to any write port that belongs to the same state element as the read port.
+
+
+{\bf Valid Signals}
+
+The tool generates a valid signal for each pipeline stage. Each pipeline stage is currently valid if the previous pipline stage was valid on the last clock cycle, no state element read ports in this pipeline stage has a RAW hazard, no IO port in this stage is busy, and there are no kill signals triggered in this stage. The input ready signals, output valid signals, Variable Latency Unit Interface Req Valid signals, and state element write enable signal are masked with the valid signal for the pipeline stage they belong in.
+
+
+{\bf Stall Signals}
+
+The tool generates a stall signal for each pipeline stage. When a pipeline stage is stalled, the contents of that pipeline stage does not progress into the next pipeline stage. The boolean equation for stage X's stall signal = stage X + 1 is stalled OR (stage X was valid last cycle AND (a read port in stage X+1 has a RAW hazard OR a IO port in stage X+1 is busy)). The input ready signals, output valid signals, Variable Latency Unit Interface Req Valid signals, and state element write enable signal are masked with the valid signal for the pipeline stage they belong in. 
+
 
 \subsubsection{Differences From VLSI Retiming}
 The automatic pipelining ability of AutoMArch appears to be similar to well known VLSI Retiming methods, but it is much more powerful. VLSI Retiming methods are only capable of adding pipeline stages to purely combinational datapath or moving registers around in a manually pipelined sequential datapath. It is not capable of adding pipeline stages to an unpipelined sequential datapath and the way it can move registers around in a manually pipelined sequential datapath is contrained by the placement of the manually constructed pipeline control logic. AutoMArch is capable of adding pipeline stages to arbitrary sequential datapaths as long as they follow the restrictions in \ref{section:InputRestrictions}. Additionally, AutoMArch has full freedom to place the pipeline registers in sequential datapaths because it can generate the correct pipeline control logic for any legal pipeline register placement.
+
+\subsubsection{Example Application}
+
 \subsection{Automatic Multi-threading}
+%present automatic multi-threading as a modification of the automatic pipelining scheme
+\subsubsection{Multi-threading Options and Specification}
+\subsubsection{Pipeline Control Logic Generation}
+\subsubsection{Example Application}
