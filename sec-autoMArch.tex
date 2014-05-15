@@ -1,8 +1,9 @@
 \section{AutoMArch}
-AutoMArch is capable of creating multi-threaded in-order designs of any number of threads and any number of pipeline stages that is functionally equivalent to n-copies of the input base functional datapath, where n is the number of threads. The functionality of the input base datapath is defined by its input output behavior and its next state update behavior. Two designs are defined as functionally equivalent if given the same starting architectural state and sequence of inputs, the two designs transition to the same ending architectural state and produce the same sequence of outputs. Architectural state elements are defined as the state elements present in the input base functional datapath. AutoMArch always preserves the state elements present in the input base functional datapath, but maybe add additional state elements such as pipeline registers that are not considered architectural state.
+AutoMArch is capable of creating multi-threaded in-order designs of any number of threads and any number of pipeline stages that is functionally equivalent to n-copies of the input base functional datapath, where n is the number of threads. The functionality of the input base datapath is defined by its input output behavior and its next state update behavior. Two designs are defined as functionally equivalent if given the same starting architectural state and sequence of inputs, the two designs transition to the same ending architectural state and produce the same sequence of outputs. Architectural state elements are defined as the state elements present in the input base functional datapath. AutoMArch always preserves the state elements present in the input base functional datapath, but may add additional state elements such as pipeline registers that are not considered architectural state. AutoMArch takes an input base functional datapath specified in Scalpel and outputs the multi-threaded in-order design as a Chisel source file, which can be feed into various simulation, FPGA, and ASIC flows.
 
 \subsection{Input Datapath Restrictions}
-The input base functional datapath can be an arbitrary FSM with the following restrictions:
+\label{section:InputRestrictions}
+The input base functional datapath can be an arbitrary FSM specified in Scalpel with the following restrictions:
 
 {\bf (1)} The input FSM must communicate to the outside world through ready/valid ports  
 
@@ -26,6 +27,7 @@ When input ready or output valid is driven high by the input FSM, this implicity
 In order to accomodate caches and long latency arithmetic units in the minimal FSM specification that is not allowed to have any optimization or control logic implemented, the tool provides the Variable Latency Unit Interface. The designer should access any caches or long latency arithmetic units through a Variable Latency Unit Interface and treat that Variable Latency Unit Interface like a piece of combinational logic in the input FSM specification. IE the designer should not use the Resp Pending port of the Variable Latency Unit Interface to drive any part of their circuit and should pretend that the Variable Latency Unit Interface always gives a valid response immediately. The tool will automatically generate control logic that deals with the Variable Latency Unit Interface not immediately outputting a valid response.
 
 \subsection{Conventions}
+\label{section:conventions}
 {\bf State Element Partitioning}
 State elements in the input FSM will be considered as multiple circuit components. For singular registers, the read output is considered a separate component from the write data and write enable inputs and will be referred to as the register's read port. The write data and write enable input is considered together as a single circuit component and will be referred to as the register's write port. For memories, which could be either an array of registers or a SRAM block, each read port and each write port is considered a separate component. 
 
@@ -36,6 +38,7 @@ Traditionally, in order pipelining is discussed with regards to processors or st
 
 \subsection{Automatic Pipelining}
 \subsubsection{Pipelining Options}
+\label{section:pipelineOptions}
 First the designer must select the number of pipeline stages the optimized design should have. This is the minimum specification needed. If no additional specification is provided, the tool will automatically place all of the pipeline registers and default to generating an inorder pipeline that resolves all pipeline hazards by interlock.
 
 {\bf Pipeline Stage Placement}
@@ -46,10 +49,57 @@ If this default placement is not suitable, the designer is given the option to m
 Thus, the designer has the flexibility to manually place none, some, or all of the circuit components in the base functional datapath. The designer can initially let to the tool place all of the circuit components and gradually manually place components as performance issues are discovered.
 
 {\bf Pipeline Hazard Resolution}
-In the traditional framework of inorder processor pipeline design, there are three types of hazards - data hazards, control hazards, and structural hazards. Only data hazards need to be dealt with by the tool. Data hazards arise when the next state update in pipeline stage X reads a state element that could be written by a next state update in pipeline stage Y, where Y > X, but Y <= the stage of the state element's write port. In traditional pipelined processors, control hazards arise when the next PC information is not available soon enough for branch and jump instructions. This is really just a data hazard on the PC register and does not need to be considered separately. Likewise, in traditional pipelined processors structural hazards arise when instructions in different stages of the pipeline need to write to the register file at the same time, but there is only one register file write port. This cannot happen in AFDO because the input base functional datapath does not have multiple pipeline stages and the tool will not generate logic to have instructions at different pipeline stages write to the same architectural state element write port.
+In the traditional framework of inorder processor pipeline design, there are three types of hazards - data hazards, control hazards, and structural hazards. Only data hazards need to be dealt with by the tool. Data hazards arise when the next state update in pipeline stage X reads a state element R that could be written by a next state update in pipeline stage Y, where Y {\tt >} X, but Y {\tt <=} the stage of the R's write port. In traditional pipelined processors, control hazards arise when the next PC information is not available soon enough for branch and jump instructions. This is really just a data hazard on the PC register and does not need to be considered separately. Likewise, in traditional pipelined processors structural hazards arise when instructions in different stages of the pipeline need to write to the register file at the same time, but there is only one register file write port. This cannot happen in AFDO because the input base functional datapath does not have multiple pipeline stages and the tool will not generate logic to have instructions at different pipeline stages write to the same architectural state element write port.
+
+There are three common ways to resolve data hazards - interlocking, bypassing, and speculation. Each option has different performance and area characteristics. The tool generates logic that implements interlocking by default. The designer may choose bypassing or speculation on a read port by read port basis by annotating the particular architectural state element read port they want to be bypassed or speculated in the base functional datapath RTL source. Details of each hazard resolution option will be discussed in \ref{section:logicGen}
+
+\subsubsection{Circuit Node Graph Creation}
+Because AutoMArch uses Scalpel to specify the input base functional datapath, it does not need to do any additional work to create a node graph data structure representing the input base datapath. Scalpel's internal data structure already uses a node graph to represent the design. All IO pins, wire, logic gates, and state element read and write ports are represented as individual nodes and all nodes maintain a list of its inputs and a list of its consumers. This node graph is convinient for AutoMArch to use directly because it follows the conventions in \ref{section:conventions} as it uses separate graph nodes to represent every state element's read and write ports and by extension has a acyclic node graph. AutoMArch modifies Scalpel's internal node graph data structure directly and uses Scalpel's buildt in elaboration methods to produce the Chisel source file that represents the final multi-threaded and pipelined design.
+
 \subsubsection{Pipeline Register Placement}
-{\bf Legal Placement}
-{\bf Optimal Placement}
+The automatic pipelining tool first creates a legal placement of pipeline registers and then creates a optimized placement by balancing the critical path delay in each stage. The automatic placement process preserves the user specified pipeline stage of user annotated base datapath components.
+
+
+{\bf Pipeline Legality}
+
+For a pipeline register placement to be legal, it must satisfy the following conditions:
+
+{\bf (1)} Every combinational logic node has all input signal with the same stage number.  
+
+{\bf (2)} The stage number of every combinational logic node's output signal is equal to the shared stage number of its input signals.
+
+{\bf (3)} There are two ways to determine the stage number of a node. One way is to trace through the node's inputs to a pipeline register and set the stage number of the node equal to the stage number of that pipeline register. Another way is to trace through the node’s consumers to a pipeline register and set the stage number of the node equal to the stage number of that pipeline register {\tt -}  1. For all nodes in the graph, the stage number of the node obtained through both methods must be the same.
+
+{\bf (4)} All the read ports of a state element must have the same stage number and all the write ports of a state element must have the same stage number. The stage number of a state element's read port(s) must {\tt <=} that state element's write port(s).
+
+{\bf (5)} All of the user facing IO pins of a Variable Latency Unit Interface must have the same pipline stage number, as the designer treats a Variable Latency Unit as a combinational logic unit.
+
+{\bf (6)} Every input ready/valid IO must have a stage number <= the minimum stage number of every output ready/valid IO. (inputs must be placed before outputs)
+
+It is possible that the designer manually annotates the base datapath in such a way that no legal pipeline register placement can be produced without changing the stage of the user specified components. If this is the case, an error is triggered.
+
+
+{\bf Obtaining a Initial Legal Placement}
+
+To make pipeline register placement easier, the tool creates a slightly modified node graph to represent the input base datapath. In this modified node graph, all of the read ports of a state element are merged into one node and all of the write ports of a state element are merged into one node, in order to maintain pipeline legality condition {\bf (4)}. Then, all of the user facing IO pins of a Variable Latency Unit Interface are merged into one node in order to maintain pipeline legality condition {\bf (5)}. Then all of the pins associated with a ready/valid port are merged into a single node. Additionally, a node representing a wire is inserted between all combinational logic nodes in the original design. This ensures that a pipeline boundary never has to fall across a combinational logic node, which would be difficult to reconcile with the notion of Pipeline Legality discussed above. All other aspects of the Scalpel node graph remain the same.
+
+In this node graph, the register readports are source nodes(which have no inputs) and all architectural state element write ports and output ready/valid ports are sink nodes(which have no consumers). All nodes in the input base datapath can be reached through the source nodes' consumer pointers, with the execption of nodes driven only by constants, which don't need to be considered in the pipeline register placement process. All nodes in the input base datapath can be reached through the sink nodes' input pointers. The tool produces the initial legal pipeline placement by propagating stage numbers out from the source nodes to their consumers and the sink nodes to their inputs in a pseudo breadth-first-search (BFS) manner. When two propagation frontiers with different stage numbers meet at the same node, propagation down that path stops and pipeline registers are inserted at that node. The source and sink nodes are guaranteed to have pipeline stage numbers at the beginning of the process, whether through user annotation or through the defaults mentioned in \ref{section:pipelineOptions}
+
+We must maintain the following conditions during the pipeline stage propagation process:
+
+{\bf (1)} Adjust the propagation rates of each propagation frontier so that two different propagation frontiers never meet at a combinational logic node and always meets at a wire node, because it does not make sense to split a combinational logic node in half with a pipeline register.
+
+{\bf (2)}  The stage number propagated to a combinational logic node with multiple inputs must be the maximum of the stage numbers of all of its inputs. If this was not maintained, we would have some inputs of the combinational logic node have a greater stage number than the stage number of the output of the combinational node, which violates 2nd condition of Pipeline Legality. This also means that we cannot propagate to a Chisel node with multiple inputs from the input side until all of its inputs have been propagated to.
+
+{\bf (3)} The stage number propagated to a combinational logic node with multiple consumers must be the minimum of the stage numbers of all of its consumers. If this was not maintained, we would have some consumers of the combinational logic node have a smaller stage number than the stage number of the output of the combinational node, which cause that consumer to violate the 3rd condition of Pipeline Legality. This also means that we cannot propagate to a Chisel node with multiple consumers from the consumer side until all of its consumers have been propagated to.
+
+
+{\bf Obtaining an Optimal Placement}
+
+
 \subsubsection{Pipeline Control Logic Generation}
+\label{section:logicGen}
+
 \subsubsection{Differences From VLSI Retiming}
+The automatic pipelining ability of AutoMArch appears to be similar to well known VLSI Retiming methods, but it is much more powerful. VLSI Retiming methods are only capable of adding pipeline stages to purely combinational datapath or moving registers around in a manually pipelined sequential datapath. It is not capable of adding pipeline stages to an unpipelined sequential datapath and the way it can move registers around in a manually pipelined sequential datapath is contrained by the placement of the manually constructed pipeline control logic. AutoMArch is capable of adding pipeline stages to arbitrary sequential datapaths as long as they follow the restrictions in \ref{section:InputRestrictions}. Additionally, AutoMArch has full freedom to place the pipeline registers in sequential datapaths because it can generate the correct pipeline control logic for any legal pipeline register placement.
 \subsection{Automatic Multi-threading}
