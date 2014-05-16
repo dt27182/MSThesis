@@ -187,14 +187,6 @@ In order to implement speculation, RAW hazard signals belonging to read ports th
 \subsubsection{Differences From VLSI Retiming}
 The automatic pipelining ability of AutoMArch appears to be similar to well known VLSI Retiming methods, but it is much more powerful. VLSI Retiming methods are only capable of adding pipeline stages to purely combinational datapath or moving registers around in a manually pipelined sequential datapath. It is not capable of adding pipeline stages to an unpipelined sequential datapath and the way it can move registers around in a manually pipelined sequential datapath is contrained by the placement of the manually constructed pipeline control logic. AutoMArch is capable of adding pipeline stages to arbitrary sequential datapaths as long as they follow the restrictions in \ref{section:InputRestrictions}. Additionally, AutoMArch has full freedom to place the pipeline registers in sequential datapaths because it can generate the correct pipeline control logic for any legal pipeline register placement.
 
-\subsubsection{Example Application}
-\label{section:autoPipeEval}
-I have used the automatic pipelining capabilities of AutoMArch to automatically generate pipelined versions of a simple example RISC processor from the RTL decription of the unoptimized 1 stage version of that processor. The base RISC processor is a classic RISC machine that contains a ICache with a miss latency of 4 cycles, which is accessed through a Variable Latency Interface, and a magic single cycle DMem and is illustrated in Figure \ref{}. It supports a very simple instruction set as shown in Figure \ref{}
-
-I was able to create 2 stage, 3 stage, and 4 stage version of the input base processor with speculation applied to the PC register a variety of selected data hazard resolution options applied to the register file reads.
-
-I completely relied on the tool to find the optimal pipeline register placements with the exception of the PC register, which I forced to be placed in the stage 2 to minimize branch penalty.
-
 \subsection{Automatic Multi-threading}
 \label{section:autoMult}
 The specification and node-graph transformations needed for producing a multi-threaded in-order datapath from a base functional datapath build upon the framework established in \ref{section:autoPipe}. The multi-threaded pipelines produced by AutoMArch have all of their architectural state elements, the IO ports, and the Variable Latency Unit IOs replicated n times, where n is the specified number of threads, and the combinational logic is not replicated. From the outside world, the optimized datapath will be functionally equivalent to n-copies of the original base datapath, but the optimized datapath requires much less than n-times the area, where n is the number of threads. The multi-threaded datapaths produced in this manner also obtain better throughput/area than the base functional datapath in the right conditions because multi-threaded datapaths can get rid of next state update to next state update data dependencies and can hid the long access latencies of functional units wrapped in Variable Latency Unit Interfaces.
@@ -237,8 +229,62 @@ The schemes for generating pipeline control logic that deals with both IO port u
 {\bf (6)} If dynamic interleave is selected, kill signals need to be generated if a Variable Latency Unit signals Resp Pending and the the thread sel signal of the stage of the Variable Latency Unit equals the thread num associated with that Variable Latency Unit.
 
 \subsubsection{Example Application}
-I used AutoMArch to explored the design space of the same simple RISC processor described in \ref{section:autoPipeEval}number of threads (1 - 4), number of pipeline stages (1 - 4), and fixed vs dynamic interleave. 
+I created simple RISC processor and used AutoMArch to explore the design space of number of threads (1 - 4), number of pipeline stages (1 - 4), and fixed vs dynamic interleave. The base RISC processor is a classic RISC machine that contains a ICache with a miss latency of 4 cycles, which is accessed through a Variable Latency Interface, and a magic single cycle DMem. 
+
+In order to evaluate how effective the generated multi-threaded designs are at hiding the latencies of long latency functional units in general, which is one of the primary advantages of multi-threading, the ICache is made to pseudo randomly miss based on the output of a LFSR. Each thread accesses its own private ICache through the Variable Latency Unit Interface. This gives a representative evaluation of multi-threaded design effectiveness regardless of the quality of the benchmark program used on the RISC processor.
 
 In order to evaluate how effective the generated multi-threaded designs are at hiding the latencies of long latency functional units in general, which is one of the primary advantages of multi-threading, the ICache is made to pseudo randomly miss based on the output of a LFSR. Each thread accesses its own private ICache through the Variable Latency Unit Interface. This gives a representative evaluation of multi-threaded design effectiveness regardless of the quality of the benchmark program used on the RISC processor.
 
 The metric for performance used is Throughput/Area, which can be broken down into $Task/Cycle * (Cycle/Time)/Area$. $Task/Cycle$ and $(Cycle/Time)/Area$ separately are shown separately from the overall Throughput{\tt /}Area for each design point. Cycle counts are obtained from running an arithmetic benchmark on each design point in Chisel's cycle accurate C++ simulator. Area and frequency number are obtained from pushing each design point through synthesis on a 40nm process.
+
+\begin{figure}
+\centering
+\resizebox{\columnwidth}{!}{\includegraphics{figures/DynamicCycleTime.pdf}}
+\caption{{\bf Dynamic Interleave Task{\tt /}Cycle} The Y-Axis is in units of $task/cycle$.}
+\label{fig:dynamicTaskPerCycle}
+\centering
+\resizebox{\columnwidth}{!}{\includegraphics{figures/DynamicArea.pdf}}
+\caption{{\bf Dynamic Interleave (Cycle{\tt /}Time){\tt /}Area} The Y-Axis is in units of $GHz/um^2$.}
+\label{fig:dynamicFreqPerArea}
+\end{figure}
+
+\begin{figure}
+\centering
+\resizebox{\columnwidth}{!}{\includegraphics{figures/FixedCycleTime.pdf}}
+\caption{{\bf Fixed Interleave Task{\tt /}Cycle} The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $task/cycle$.}
+\label{fig:fixedTaskPerCycle}
+\centering
+\resizebox{\columnwidth}{!}{\includegraphics{figures/FixedArea.pdf}}
+\caption{{\bf Fixed Interleave (Cycle{\tt /}Time){\tt /}Area} The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $GHz/um^2$.}
+\label{fig:fixedFreqPerArea}
+\end{figure}
+
+\begin{figure}
+\centering
+\resizebox{\columnwidth}{!}{\includegraphics{figures/DynamicTaskPerCycle.pdf}}
+\caption{{\bf Dynamic Interleave Task{\tt /}Cycle} The Y-Axis is in units of $task/cycle$.}
+\label{fig:dynamicTaskPerCycle}
+\centering
+\resizebox{\columnwidth}{!}{\includegraphics{figures/DynamicFreqPerArea.pdf}}
+\caption{{\bf Dynamic Interleave (Cycle{\tt /}Time){\tt /}Area} The Y-Axis is in units of $GHz/um^2$.}
+\label{fig:dynamicFreqPerArea}
+\centering
+\resizebox{\columnwidth}{!}{\includegraphics{figures/DynamicThroughputPerArea.pdf}}
+\caption{{\bf Dynamic Interleave Throughput{\tt /}Area} The Y-Axis is in units of $(task/ns)/um^2$.}
+\label{fig:dynamicThroughputPerArea}
+\end{figure}
+
+\begin{figure}
+\centering
+\resizebox{\columnwidth}{!}{\includegraphics{figures/FixedTaskPerCycle.pdf}}
+\caption{{\bf Fixed Interleave Task{\tt /}Cycle} The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $task/cycle$.}
+\label{fig:fixedTaskPerCycle}
+\centering
+\resizebox{\columnwidth}{!}{\includegraphics{figures/FixedFreqPerArea.pdf}}
+\caption{{\bf Fixed Interleave (Cycle{\tt /}Time){\tt /}Area} The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $GHz/um^2$.}
+\label{fig:fixedFreqPerArea}
+\centering
+\resizebox{\columnwidth}{!}{\includegraphics{figures/FixedThroughputPerArea.pdf}}
+\caption{{\bf Fixed Interleave Throughput{\tt /}Area} The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $(task/ns)/um^2$.}
+\label{fig:fixedThroughputPerArea}
+\end{figure}
