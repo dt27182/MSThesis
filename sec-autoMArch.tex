@@ -224,7 +224,7 @@ The schemes for generating pipeline control logic that deals with both IO port u
 
 {\bf (4)} If dynamic interleave is selected, the speculative clone registers need to be replicated just like the architectural registers and the mis-speculation detection logic will need to signal mis-speculate only when the thread sel of the pipelined speculated values match the thread sel of the actual write data and the speculated value does not match the actual write value.
 
-{\bf (4)} Additional IO Busy and VarLatIO Busy signals need to be generated for the replicated IO and Variable Latency Unit Interface ports for each thread. It is important to note that 
+{\bf (4)} Additional IO Busy and VarLatIO Busy signals need to be generated for the replicated IO and Variable Latency Unit Interface ports for each thread.
 
 {\bf (5)} IO Busy signals and VarLatIO Busy signals are masked with the thread sel signal of the stage they belong to.
 
