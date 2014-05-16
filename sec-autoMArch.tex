@@ -145,6 +145,14 @@ The user specifies that a register read port should be speculated upon in by ann
 
 \subsubsection{Pipeline Control Logic Generation}
 \label{section:controlLogicGen}
+
+\begin{figure*}
+	\centering
+    \resizebox{1.5\columnwidth}{!}{\includegraphics{figures/single-thread-ctrl-logic}}
+    \caption{Basic interlocking control logic generated for a 3 stage pipeline. The combinational logic of the original input datapath is not shown for clarity.}
+	\label{fig:ctrlLogic}
+\end{figure*}
+
 After the tool places the pipeline registers, it then automatically generates the pipeline control logic that keeps the functional behavior of the pipelined data path the same as the functional behavior of the base input circuit. The pipeline control logic will need to deal with both the availability of valid tokens at the ready/valid IO ports as well as the data hazards introduced by pipelining. I will first present the scheme necessary to generate control logic that deals with the availability of IO ports and handles all data hazards through interlocking. Then I will present the control logic needed for bypassing and speculation as modifications on top of the basic interlocking scheme.
 
 The following signals are generated in the basic interlocking scheme:
@@ -178,7 +186,7 @@ In order to determine if any pipeline stage was valid on the last clock cycle, t
 
 The tool generates a stall signal for each pipeline stage. When a pipeline stage is stalled, the contents of that pipeline stage do not progress into the next pipeline stage. The boolean equation for stage X's stall signal = stage X + 1 is stalled OR (stage X was valid last cycle AND (a read port in stage X+1 has a RAW hazard OR a IO port in stage X+1 is busy OR a Variable Latency Unit in stage X+1 is busy)). The input ready signals, output valid signals, Variable Latency Unit Interface Req Valid signals, and state element write enable signal are masked with the valid signal for the pipeline stage they belong in. 
 
-The above scheme is illustrated in Figure \ref{}%todo
+The above scheme is illustrated in Figure \ref{fig:ctrlLogic}
 
 In order to implement bypassing, the above scheme is modified in the following way. The RAW hazard signals belonging to read ports that are specified to be bypassed are not fed into the AND gate driving the stage valid signal. Instead, the RAW hazard signals are used as the select signals of the bypass muxes placed in front of the bypassed read ports.
 
@@ -233,58 +241,76 @@ I created simple RISC processor and used AutoMArch to explore the design space o
 
 In order to evaluate how effective the generated multi-threaded designs are at hiding the latencies of long latency functional units in general, which is one of the primary advantages of multi-threading, the ICache is made to pseudo randomly miss based on the output of a LFSR. Each thread accesses its own private ICache through the Variable Latency Unit Interface. This gives a representative evaluation of multi-threaded design effectiveness regardless of the quality of the benchmark program used on the RISC processor.
 
-In order to evaluate how effective the generated multi-threaded designs are at hiding the latencies of long latency functional units in general, which is one of the primary advantages of multi-threading, the ICache is made to pseudo randomly miss based on the output of a LFSR. Each thread accesses its own private ICache through the Variable Latency Unit Interface. This gives a representative evaluation of multi-threaded design effectiveness regardless of the quality of the benchmark program used on the RISC processor.
-
 The metric for performance used is Throughput/Area, which can be broken down into $Task/Cycle * (Cycle/Time)/Area$. $Task/Cycle$ and $(Cycle/Time)/Area$ separately are shown separately from the overall Throughput{\tt /}Area for each design point. Cycle counts are obtained from running an arithmetic benchmark on each design point in Chisel's cycle accurate C++ simulator. Area and frequency number are obtained from pushing each design point through synthesis on a 40nm process.
+
+\subsection{Dynamic Interleave}
+The trends shown in Figure \ref{fig:dynamicTaskPerCycle}. are generally expected. Task per cycle increases as the number of threads increases due to fewer data dependency hazards and masking of ICache miss latency. Task per cycle decreases as the number of pipeline stages increases beyond the number of threads because the pipeline becomes over saturated and the threads beging to interfere with each other.
+
+The trends shown in Figure \ref{fig:dynamicFreqPerArea}. are also generally expected. $(Cycle/Time)/Area$ decreases as number of threads increase because adding more threads increases the area and increase the critical path length. $(Cycle/Time)/Area$ remains mostly constant as number of pipeline stages because pipeling increases area and decreases the critical path length at the same time.
+
+Multiplying Figure \ref{fig:dynamicTaskPerCycle}. and \ref{fig:dynamicThroughputPerArea}. togther, we obtain Figure \ref{fig:dynamicThroughputPerArea}. From this figure, we can see that the 1 thread, 1 stage designs obtains the best overall Throughput/Area. This is probably because the ICache used in these designs does have have a long enough miss penalty to justify the additional costs of multi-threading.
+
+\subsection{Fixed Interleave}
+Because the fixed interleave policy stalls the entire pipeline whenever a Variable Latency Unit Interface signals Resp Pending, the number of threads and number of pipeline stages makes a negligible impact on Task per cycle as shown in \ref{fig:fixedTaskPerCycle}.
+
+Figure \ref{fig:fixedFreqPerArea}. shows that the $(Cycle/Time)/Area$ statistics are very similar to the $(Cycle/Time)/Area$ statistics for dynamic interleave. This tells us that the additional control logic required by dynamic interleave plays a negligible role in determining area and delay.
+
+Multiplying Figure \ref{fig:fixedTaskPerCycle}. and \ref{fig:fixedThroughputPerArea}. togther, we obtain Figure \ref{fig:fixedThroughputPerArea}. From this figure, we can see that the 1 thread, 1 stage designs obtains the best overall Throughput/Area just like with dynamic interleave. However, all of the design points have lower Throughput/Area than their equivalents with dynamic interleave. Thus, we can conclude that for the example RISC processor design, the latency benefits gained from dynamic interleave outweigh the additional area and delay cost of the more complex control logic in dynamic interleave.
 
 \begin{figure}
 \centering
 \resizebox{\columnwidth}{!}{\includegraphics{figures/DynamicCycleTime.pdf}}
-\caption{{\bf Dynamic Interleave Task{\tt /}Cycle} The Y-Axis is in units of $task/cycle$.}
-\label{fig:dynamicTaskPerCycle}
+\caption{{\bf Dynamic Interleave Cycle Time} The X-Axis indicates the number of pipeline stages. The Y-Axis is in units of $ns$.}
+\label{fig:dynamicCycleTime}
+
 \centering
 \resizebox{\columnwidth}{!}{\includegraphics{figures/DynamicArea.pdf}}
-\caption{{\bf Dynamic Interleave (Cycle{\tt /}Time){\tt /}Area} The Y-Axis is in units of $GHz/um^2$.}
-\label{fig:dynamicFreqPerArea}
+\caption{{\bf Dynamic Interleave Area} The X-Axis indicates the number of pipeline stages. The Y-Axis is in units of $um^2$.}
+\label{fig:dynamicArea}
 \end{figure}
 
 \begin{figure}
 \centering
 \resizebox{\columnwidth}{!}{\includegraphics{figures/FixedCycleTime.pdf}}
-\caption{{\bf Fixed Interleave Task{\tt /}Cycle} The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $task/cycle$.}
-\label{fig:fixedTaskPerCycle}
+\caption{{\bf Fixed Interleave Cycle Time} The X-Axis indicates the number of pipeline stages. The Y-Axis is in units of $ns$. The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart.}
+\label{fig:fixedCycleTime}
+
 \centering
 \resizebox{\columnwidth}{!}{\includegraphics{figures/FixedArea.pdf}}
-\caption{{\bf Fixed Interleave (Cycle{\tt /}Time){\tt /}Area} The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $GHz/um^2$.}
-\label{fig:fixedFreqPerArea}
+\caption{{\bf Fixed Interleave Area} The X-Axis indicates the number of pipeline stages. The Y-Axis is in units of $um^2$. The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart.}
+\label{fig:fixedArea}
 \end{figure}
 
 \begin{figure}
 \centering
 \resizebox{\columnwidth}{!}{\includegraphics{figures/DynamicTaskPerCycle.pdf}}
-\caption{{\bf Dynamic Interleave Task{\tt /}Cycle} The Y-Axis is in units of $task/cycle$.}
+\caption{{\bf Dynamic Interleave Task{\tt /}Cycle} The X-Axis indicates the number of pipeline stages. The Y-Axis is in units of $task/cycle$.}
 \label{fig:dynamicTaskPerCycle}
+
 \centering
 \resizebox{\columnwidth}{!}{\includegraphics{figures/DynamicFreqPerArea.pdf}}
-\caption{{\bf Dynamic Interleave (Cycle{\tt /}Time){\tt /}Area} The Y-Axis is in units of $GHz/um^2$.}
+\caption{{\bf Dynamic Interleave (Cycle{\tt /}Time){\tt /}Area} The X-Axis indicates the number of pipeline stages. The Y-Axis is in units of $GHz/um^2$.}
 \label{fig:dynamicFreqPerArea}
+
 \centering
 \resizebox{\columnwidth}{!}{\includegraphics{figures/DynamicThroughputPerArea.pdf}}
-\caption{{\bf Dynamic Interleave Throughput{\tt /}Area} The Y-Axis is in units of $(task/ns)/um^2$.}
+\caption{{\bf Dynamic Interleave Throughput{\tt /}Area} The X-Axis indicates the number of pipeline stages. The Y-Axis is in units of $(task/ns)/um^2$.}
 \label{fig:dynamicThroughputPerArea}
 \end{figure}
 
 \begin{figure}
 \centering
 \resizebox{\columnwidth}{!}{\includegraphics{figures/FixedTaskPerCycle.pdf}}
-\caption{{\bf Fixed Interleave Task{\tt /}Cycle} The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $task/cycle$.}
+\caption{{\bf Fixed Interleave Task{\tt /}Cycle} The X-Axis indicates the number of pipeline stages. The Y-Axis is in units of $task/cycle$. The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart.}
 \label{fig:fixedTaskPerCycle}
+
 \centering
 \resizebox{\columnwidth}{!}{\includegraphics{figures/FixedFreqPerArea.pdf}}
-\caption{{\bf Fixed Interleave (Cycle{\tt /}Time){\tt /}Area} The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $GHz/um^2$.}
+\caption{{\bf Fixed Interleave (Cycle{\tt /}Time){\tt /}Area} The X-Axis indicates the number of pipeline stages. The Y-Axis is in units of $GHz/um^2$. The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart.}
 \label{fig:fixedFreqPerArea}
+
 \centering
 \resizebox{\columnwidth}{!}{\includegraphics{figures/FixedThroughputPerArea.pdf}}
-\caption{{\bf Fixed Interleave Throughput{\tt /}Area} The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart. The Y-Axis is in units of $(task/ns)/um^2$.}
+\caption{{\bf Fixed Interleave Throughput{\tt /}Area} The X-Axis indicates the number of pipeline stages. The Y-Axis is in units of $(task/ns)/um^2$. The data points where number of stages {\tt >} number of threads are not valid design points for fixed interleave, so they do not exist on this chart.}
 \label{fig:fixedThroughputPerArea}
 \end{figure}
