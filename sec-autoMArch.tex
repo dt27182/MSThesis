@@ -26,6 +26,8 @@ When input ready or output valid is driven high by the input FSM, this implicity
 \subsubsection{Variable Latency Unit Interface}
 In order to accomodate caches and long latency arithmetic units in the minimal FSM specification that is not allowed to have any optimization or control logic implemented, the tool provides the Variable Latency Unit Interface. The designer should access any caches or long latency arithmetic units through a Variable Latency Unit Interface and treat that Variable Latency Unit Interface like a piece of combinational logic in the input FSM specification. IE the designer should not use the Resp Pending port of the Variable Latency Unit Interface to drive any part of their circuit and should pretend that the Variable Latency Unit Interface always gives a valid response immediately. The tool will automatically generate control logic that deals with the Variable Latency Unit Interface not immediately outputting a valid response.
 
+When the tool does the multithreading transformation, each Variable Latency Unit Interface in the input minimal FSM is replicated n times, where n is the number of threads. It is up to the designer to create glue logic that deals the copies of the Variable Latency Unit Interfaces in a top level module that instantiates the automatically multi-threaded module. The designer can instantiate n copies of the functional unit, one for each Variable Latency Unit Interface, or can create additional logic that multiplexes all copies of the Variable Latency Unit Interface onto a single functional unit.
+
 \subsection{Conventions}
 \label{section:conventions}
 {\bf State Element Partitioning}
@@ -37,7 +39,10 @@ This partitioning of the state elements into separate read and write ports make 
 Traditionally, in order pipelining is discussed with regards to processors or stateless combinational units. Pipelining stateless combinational units is trivial as there are no inter-pipeline stage dependencies. When pipelining processors, we consider the dependencies between each instruction flowing down the pipeline when creating pipeline control logic. However, pipelining as discussed in this thesis can be applied to arbitrary finite state machines. In this context, it does not make sense to talk about instruction to instruction dependencies as we are not only dealing with arbitrary FSMs. Instead, we will consider there to be a series of next state updates flowing down the pipeline. When constructing pipeline control logic, we will consider dependencies between each next state update flowing down the pipeline.
 
 \subsection{Automatic Pipelining}
-\subsubsection{Pipelining Options}
+\label{section:autoPipe}
+I will first cover the specification and node graph transformations required to produce a single thread in-order pipelined datapath from the input base functional datapath. The specification and node graph transformations needed to create multi-threaded in-order pipelined datapaths will build upon the framework established in this section and will be discussed in \ref{section:autoMult}.
+
+\subsubsection{Pipelining Options and Specification}
 \label{section:pipelineOptions}
 First the designer must select the number of pipeline stages the optimized design should have. This is the minimum specification needed. If no additional specification is provided, the tool will automatically place all of the pipeline registers and default to generating an inorder pipeline that resolves all pipeline hazards by interlock.
 
@@ -54,9 +59,11 @@ In the traditional framework of inorder processor pipeline design, there are thr
 There are three common ways to resolve data hazards - interlocking, bypassing, and speculation. Each option has different performance and area characteristics. The tool generates logic that implements interlocking by default. The designer may choose bypassing or speculation on a read port by read port basis by annotating the particular architectural state element read port they want to be bypassed or speculated in the base functional datapath RTL source. Details of each hazard resolution option will be discussed in \ref{section:logicGen}
 
 \subsubsection{Circuit Node Graph Creation}
+\label{section:graphCreation}
 Because AutoMArch uses Scalpel to specify the input base functional datapath, it does not need to do any additional work to create a node graph data structure representing the input base datapath. Scalpel's internal data structure already uses a node graph to represent the design. All IO pins, wire, logic gates, and state element read and write ports are represented as individual nodes and all nodes maintain a list of its inputs and a list of its consumers. This node graph is convinient for AutoMArch to use directly because it follows the conventions in \ref{section:conventions} as it uses separate graph nodes to represent every state element's read and write ports and by extension has a acyclic node graph. AutoMArch modifies Scalpel's internal node graph data structure directly and uses Scalpel's buildt in elaboration methods to produce the Chisel source file that represents the final multi-threaded and pipelined design.
 
 \subsubsection{Pipeline Register Placement}
+\label{section:registerPlacement}
 The automatic pipelining tool first creates a legal placement of pipeline registers and then creates a optimized placement by balancing the critical path delay in each stage. The automatic placement process preserves the user specified pipeline stage of user annotated base datapath components.
 
 
@@ -74,7 +81,7 @@ For a pipeline register placement to be legal, it must satisfy the following con
 
 {\bf (5)} All of the user facing IO pins of a Variable Latency Unit Interface must have the same pipline stage number, as the designer treats a Variable Latency Unit as a combinational logic unit.
 
-{\bf (6)} Every input ready/valid IO must have a stage number <= the minimum stage number of every output ready/valid IO. (inputs must be placed before outputs)
+{\bf (6)} Every input ready/valid IO must have a stage number {\tt <=} the minimum stage number of every output ready/valid IO. (inputs must be placed before outputs)
 
 It is possible that the designer manually annotates the base datapath in such a way that no legal pipeline register placement can be produced without changing the stage of the user specified components. If this is the case, an error is triggered.
 
@@ -134,37 +141,48 @@ Control logic generation for arbitrary speculation is very complex, so the tool 
 
 {\bf (3)} Assuming the stage of a speculated read port is stage X and the stage of the corresponding write port is stage Y, there may not be IO ports, Variable Latency Units, architectural state element write ports, and other speculated read ports present in the stages between stage X and stage Y, inclusive of stage X.
 
-The user specifies that a register read port should be speculated upon in by annotating the desired read port as speculated in the RTL source file of the base functional datapath. The user creats a speculative clone of the register associated with the read port speculated upon and creates the update logic for that speculative clone register in the RTL source of the base funtional datapath. Then the user uses some annotations to label this clone register as the speculative clone of the original register. The tool will generate control logic that muxes the read data port of the original register with the read data port of the speculative clone register. The read data from the speculative clone register will be choosen except on the clock cycle immediate after a mispredict. During that cycle, the data held in the speculative clone register is synced with the correct data in the original register.
+The user specifies that a register read port should be speculated upon in by annotating the desired read port as speculated in the RTL source file of the base functional datapath. The user creats a speculative clone of the register associated with the read port speculated upon and creates the update logic for that speculative clone register in the RTL source of the base funtional datapath. Then the user uses some annotations to label this clone register as the speculative clone of the original register. The tool will generate logic that muxes the read data port of the original register with the read data port of the speculative clone register. The read data from the speculative clone register will be choosen except on the clock cycle immediate after a mispredict. During that cycle, the data held in the speculative clone register is synced with the correct data in the original register. Mispredicts are detected by pipelining the speculative read data until the stage of the register write port. If the speculative read data at the stage containing the next state update immediately after the next state update present in the write port state is different than the actual write data in the write port stage, all stages between the read port stage and the write port stage, inclusive of the read port stage, are killed.
 
 \subsubsection{Pipeline Control Logic Generation}
+\label{section:controlLogicGen}
 After the tool places the pipeline registers, it then automatically generates the pipeline control logic that keeps the functional behavior of the pipelined data path the same as the functional behavior of the base input circuit. The pipeline control logic will need to deal with both the availability of valid tokens at the ready/valid IO ports as well as the data hazards introduced by pipelining. I will first present the scheme necessary to generate control logic that deals with the availability of IO ports and handles all data hazards through interlocking. Then I will present the control logic needed for bypassing and speculation as modifications on top of the basic interlocking scheme.
 
 The following signals are generated in the basic interlocking scheme:
 
-{\bf IOBusy Signals}
+{\bf IO Busy Signals}
 
 An IO port is considered busy if the input ready/output valid signal is driven high, which implicitly signals that the data from this port is needed to be consumed/produced, and the input valid/output ready signal is driven low by an outside module, which indicates that the port is not available.
 
 
-{\bf VarLatIOBusy Signals}
+{\bf VarLatIO Busy Signals}
 
 A Variable Latency Unit is busy if its RespPending port is driven high.
 
 
 {\bf RAW Hazard Signals}
 
-A read port belonging to stage X is considered to have a RAW hazard if a pipeline stage Y is valid, has the same thread ID as stage X, and contains a transaction that could write to any write port that belongs to the same state element as the read port.
+A read port belonging to stage X which has corresponding write ports in stage Z has a RAW hazard signal for every stage Y, write port W pair, where X {\tt <} Y {\tt <=} Z and 0 {\tt <} W {\tt < number of corresponding write ports}. A read port is consider to have a RAW hazard for stage Y, write port W if there is a valid next state update in stage Y and there is a possibility that the next state update in stage Y will do a write to the state element associated with the read port at the same address as the read address at stage X. For registers, the read port has a RAW hazard for stage Y, write port W if the verison of the write enable signal of write port W at stage Y is high or the write enable signal is produced after stage Y. For memories, the read port has a RAW hazard for stage Y, write port W if the read enable is high AND (the version of the write enable in stage Y is high or the write enable signal is produced after stage Y) AND (the read address equals the version of the write address in stage or the write address is produced after stage Y).
 
 
 {\bf Valid Signals}
 
-The tool generates a valid signal for each pipeline stage. Each pipeline stage is currently valid if the previous pipline stage was valid on the last clock cycle, no state element read ports in this pipeline stage has a RAW hazard, no IO port in this stage is busy, and there are no kill signals triggered in this stage. The input ready signals, output valid signals, Variable Latency Unit Interface Req Valid signals, and state element write enable signal are masked with the valid signal for the pipeline stage they belong in.
+The tool generates a valid signal for each pipeline stage. Stage X is currently valid if stage X-1 was valid on the last clock cycle, no state element read ports in stage X has a RAW hazard, no IO port in stage X is busy, and no Variable Latency Unit in stage X is busy. The input ready signals, output valid signals, Variable Latency Unit Req Valid signals, and state element write enable signal are masked with the valid signal for the pipeline stage they belong in.
+
+
+{\bf Was Valid Signals}
+
+In order to determine if any pipeline stage was valid on the last clock cycle, the valid signal of every stage is fed into a register. The output of this register is known as the was valid signal. Stage X's was valid signal is fed into the AND gate driving the valid signal of stage X+1.
 
 
 {\bf Stall Signals}
 
-The tool generates a stall signal for each pipeline stage. When a pipeline stage is stalled, the contents of that pipeline stage does not progress into the next pipeline stage. The boolean equation for stage X's stall signal = stage X + 1 is stalled OR (stage X was valid last cycle AND (a read port in stage X+1 has a RAW hazard OR a IO port in stage X+1 is busy)). The input ready signals, output valid signals, Variable Latency Unit Interface Req Valid signals, and state element write enable signal are masked with the valid signal for the pipeline stage they belong in. 
+The tool generates a stall signal for each pipeline stage. When a pipeline stage is stalled, the contents of that pipeline stage do not progress into the next pipeline stage. The boolean equation for stage X's stall signal = stage X + 1 is stalled OR (stage X was valid last cycle AND (a read port in stage X+1 has a RAW hazard OR a IO port in stage X+1 is busy OR a Variable Latency Unit in stage X+1 is busy)). The input ready signals, output valid signals, Variable Latency Unit Interface Req Valid signals, and state element write enable signal are masked with the valid signal for the pipeline stage they belong in. 
 
+The above scheme is illustrated in Figure \ref{}%todo
+
+In order to implement bypassing, the above scheme is modified in the following way. The RAW hazard signals belonging to read ports that are specified to be bypassed are not fed into the AND gate driving the stage valid signal. Instead, the RAW hazard signals are used as the select signals of the bypass muxes placed in front of the bypassed read ports.
+
+In order to implement speculation, RAW hazard signals belonging to read ports that are specified to be speculated upon are removed. Kills signals are generated for every stage between the read port stage and the associated write port stage, inclusive of the read port stage. Every kill signal is driven high when a mis-speculation is detected. The kill signals of each stage are then fed into the AND gate driving the stage valid signals.
 
 \subsubsection{Differences From VLSI Retiming}
 The automatic pipelining ability of AutoMArch appears to be similar to well known VLSI Retiming methods, but it is much more powerful. VLSI Retiming methods are only capable of adding pipeline stages to purely combinational datapath or moving registers around in a manually pipelined sequential datapath. It is not capable of adding pipeline stages to an unpipelined sequential datapath and the way it can move registers around in a manually pipelined sequential datapath is contrained by the placement of the manually constructed pipeline control logic. AutoMArch is capable of adding pipeline stages to arbitrary sequential datapaths as long as they follow the restrictions in \ref{section:InputRestrictions}. Additionally, AutoMArch has full freedom to place the pipeline registers in sequential datapaths because it can generate the correct pipeline control logic for any legal pipeline register placement.
@@ -172,7 +190,44 @@ The automatic pipelining ability of AutoMArch appears to be similar to well know
 \subsubsection{Example Application}
 
 \subsection{Automatic Multi-threading}
-%present automatic multi-threading as a modification of the automatic pipelining scheme
+\label{section:autoMult}
+The specification and node-graph transformations needed for producing a multi-threaded in-order datapath from a base functional datapath build upon the framework established in \ref{section:autoPipe}. The multi-threaded pipelines produced by AutoMArch have all of their architectural state elements, the IO ports, and the Variable Latency Unit IOs replicated n times, where n is the specified number of threads, and the combinational logic is not replicated. From the outside world, the optimized datapath will be functionally equivalent to n-copies of the original base datapath, but the optimized datapath requires much less than n-times the area, where n is the number of threads. The multi-threaded datapaths produced in this manner also obtain better throughput/area than the base functional datapath in the right conditions because multi-threaded datapaths can get rid of next state update to next state update data dependencies and can hid the long access latencies of functional units wrapped in Variable Latency Unit Interfaces.
+
 \subsubsection{Multi-threading Options and Specification}
+In addition to the pipeline configuration options discussed in \ref{section:autoPipe}, the designer can specify the number of threads they want and whether to use fixed or dynamc interleave thread scheduling policies. 
+
+\subsubsection{Fixed vs Dynamic Interleave}
+In fixed interleave, the tool uses a fixed counter to select the next thread to wake up. The tool enforces that the number of threads is greater than or equal to the number of pipeline stages, so there can not be any data hazards between any two transactions in the pipeline because there is always at most one transaction from each thread in the pipeline. This allows the tool to not generate the data dependency check and resolution logic. Additionally, in fixed interleave, the tool does not generate logic to retry a transaction if it encounters a Resp Pending from a Variable Latency Unit Interface. Instead, the whole pipeline stalls. Fixed interleave provides good performance at low area and cycle time cost if the majority of the pipeline stalls will be caused by data hazards in the pipeline and Variable Latency Unit stalls are short or infrequent.
+
+In dynamic pipelining, the tool uses a user supplied thread scheduler that selects the next thread to wake up based on the status of any long latency functional units in that thread. In this mode, even if the tool restricts the number of threads to be greater than or equal to the number of pipeline stages, data hazards between two transactions in the pipeline cannot be avoided because the user supplied scheduler is free to choose any thread order and therefore can place more than one transaction from each thread in the pipeline. Additionally, in dynamic interleave, the tool generate logic to retry a transaction if it encounters a Resp Pending from a Variable Latency Unit Interface and does not stall the pipeline. Dynamic interleave is required to get good performance inf Variable Latency Unit stalls are long or frequent.
+
+\subsubsection{Circuit Node Graph Creation}
+The circuit node graph creation process discussed in \ref{section:graphCreation} does not need to be modified to accomadate multi-threading.
+
+\subsubsection{Pipeline Register Placement}
+The pipeline register placement process discussed in \ref{section:registerPlacement} does not need to be modified to accomadate multi-threading.
+
+\subsubsection{State and IO replication}
+\label{sec:replication}
+Given a user specification of n threads, the tool first replicates the IO ports the architectural state elements n times. The input ready signals, output data signals, and the output valid signals of the replicated IO elements are driven by the corresponding original IO port signals. The state element write data signals, and state element write enable signals of the replicated state elements are driven by the corresponding original state element write signals. 
+
+A mux is placed infront of the input data signals and all consumers of the original input data signal is now driven by this mux. Similarly, a mux is placed infront of the replicated state element read data signals and all consumers of the original read data signal is now driven by this mux. The select pin on these muxes will be driven by the thread sel signal generated by the thread scheduler.
+
 \subsubsection{Pipeline Control Logic Generation}
+The schemes for generating pipeline control logic that deals with both IO port unavailability and the various data hazard resolution strategies discussed in \ref{section:controlLogicGen} can be modified to produced multi-threaded in-order datapaths. The following modifications have to be made:
+
+{\bf (1)} The thread sel signal generated by the thread scheduler has to be pipelined to every pipeline stage.
+
+{\bf (2)} Input ready signals, output valid signals, Variable Latency Unit Req Valid Signals, and architectural state element write enable signals are masked with the thread sel signal, so that the IO and state elements of thread X are accessed/updated only when thread X is selected.
+
+{\bf (3)} If dynamic interleave is selected, RAW Hazard signals for read port R at stage Y are masked with the additional condition thread sel at stage of R equals thread sel at stage Y. If fixed interleave is selected, RAW hazards do not need to be generated at all and interlock would be the only necessary data hazard resolution option.
+
+{\bf (4)} If dynamic interleave is selected, the speculative clone registers need to be replicated just like the architectural registers and the mis-speculation detection logic will need to signal mis-speculate only when the thread sel of the pipelined speculated values match the thread sel of the actual write data and the speculated value does not match the actual write value.
+
+{\bf (4)} Additional IO Busy and VarLatIO Busy signals need to be generated for the replicated IO and Variable Latency Unit Interface ports for each thread. It is important to note that 
+
+{\bf (5)} IO Busy signals and VarLatIO Busy signals are masked with the thread sel signal of the stage they belong to.
+
+{\bf (6)} If dynamic interleave is selected, kill signals need to be generated if a Variable Latency Unit signals Resp Pending and the the thread sel signal of the stage of the Variable Latency Unit equals the thread num associated with that Variable Latency Unit.
+
 \subsubsection{Example Application}
